@@ -502,8 +502,13 @@ async def compact_with_span(
     tracer unless core's instrumentation is active, so this adds no overhead to a
     non-instrumented run; the before/after attributes are only computed when the span records.
 
+    A changed result is also written into `ctx.messages`, the run's persisted history. Core only
+    sends a replaced `request_context.messages` list with the outgoing request, so without this
+    write-back the compaction would be redone from the full history on every later request.
+
     Args:
-        ctx: Run context whose `tracer` the span is started on.
+        ctx: Run context whose `tracer` the span is started on and whose `messages` receive the
+            compacted history.
         strategy: Strategy name recorded in the `compaction.strategy` attribute.
         messages: The pre-compaction messages, measured for the `*_before` attributes.
         compact: Zero-argument async callable returning the compacted message list.
@@ -518,6 +523,7 @@ async def compact_with_span(
         reset_receipt_scope(token)
     if not _history_changed(messages, compacted):
         return messages
+    ctx.messages[:] = compacted
     with ctx.tracer.start_as_current_span(_SPAN_NAME) as span:
         if span.is_recording():
             span.set_attributes(
